@@ -4,15 +4,15 @@
 ## Loading and preprocessing the data
 
 ```r
+library(data.table)
 if(!file.exists("activity.csv")){
 	unzip("activity.zip")	
 }
 
-library(data.table)
-data <- read.csv("activity.csv",
-				 colClasses = c("numeric",
-				 			    "Date",
-				 			    "numeric"))
+data <- fread("activity.csv",
+			  colClasses = c("numeric",
+			  			   "Date",
+			  			   "numeric"))
 ```
 
 
@@ -22,49 +22,58 @@ data <- read.csv("activity.csv",
 ```r
 dataWithNA <- data # raw data cleaned
 data <- data[complete.cases(data$steps), ] # cleaned
-stepsPerDay <- aggregate(steps ~ date, data, sum)
+stepsPerDay <- data[, .(steps = sum(steps)), by = date]
 ```
 
 2. Let's create a histogram of total steps per day
 
 ```r
 # barplot(stepsPerDay$steps)
-hist(stepsPerDay$steps,
-	 main = "Total Steps per Day",
-	 xlab = "Steps")
+with(stepsPerDay,
+	 hist(steps,
+	 	 main = "Total Steps per Day",
+	 	 xlab = "Steps"))
 ```
 
-![](PA1_template_files/figure-html/unnamed-chunk-2-1.png)<!-- -->
+![](PA1_template_files/figure-html/hist_total_steps_per_day-1.png)<!-- -->
 
 3. Let's calculate the mean and median of the steps taken per day.
 
 ```r
-meanStepsPerDay <- mean(stepsPerDay$steps)
-medianStepsPerDay <- median(stepsPerDay$steps)
+meanStepsPerDay <- stepsPerDay[, mean(steps)]
+medianStepsPerDay <- stepsPerDay[, median(steps)]
 ```
 The mean value of total steps per day is 10766.19 and the median is 10765.
 
 
 ## What is the average daily activity pattern?
-The graph of, 5-minute intervals and the averages of steps taken, averaged across all days.
+1. The graph of, 5-minute intervals and the averages of steps taken, averaged across all days.
 
 ```r
-intervalAverages <- aggregate(steps ~ interval, data, mean)
-intervalAverages <-  intervalAverages[order(intervalAverages$interval), ]
-plot(intervalAverages$interval, intervalAverages$steps,
+intervalAverages <- data[, .(steps = mean(steps)), by = interval]
+intervalAverages <-  intervalAverages[order(interval)]
+with(intervalAverages,
+	 plot(interval, steps,
 	 type = "l",
 	 xlab = "interval",
-	 ylab = "average steps")
+	 ylab = "average steps"))
 ```
 
-![](PA1_template_files/figure-html/unnamed-chunk-4-1.png)<!-- -->
+![](PA1_template_files/figure-html/interval_avg_steps_plot-1.png)<!-- -->
+
+2. Find the interval that has maximum average number of steps.
+
+```r
+maxStepsForInterval <- intervalAverages[order(-steps)][1]
+```
+Maximum average number of steps for 5 minute interval is 206.1698113 and that is for interval 835.
 
 
 ## Imputing missing values
 1. Let's get total number of missing values in the dataset.
 
 ```r
-totalMissing <- sum(is.na(dataWithNA$steps))
+totalMissing <- dataWithNA[is.na(steps), .N]
 ```
 There are total of 2304 missing values.
 
@@ -87,21 +96,49 @@ naRemoved <- naRemoved[ , !("steps.y")]
 4. New histogram of total number of steps taken each day.
 
 ```r
-totalStepsPerDay <- aggregate(steps.x ~ date, naRemoved, sum)
+totalStepsPerDay <- naRemoved[, .(steps = sum(steps.x)),
+							  by = date]
 hist(totalStepsPerDay$steps,
 	 main = "Histogram of Total Steps per Day",
-	 xlab = "Total Steps per Day"
-	 )
+	 xlab = "Total Steps per Day")
 ```
 
-![](PA1_template_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+![](PA1_template_files/figure-html/hist_with_na-1.png)<!-- -->
 
 ```r
-totalMeanStepsPerDay <- mean(totalStepsPerDay$steps)
-totalMedianStepsPerDay <- median(totalStepsPerDay$steps)
+totalMeanStepsPerDay <- totalStepsPerDay[, mean(steps)]
+totalMedianStepsPerDay <- totalStepsPerDay[, median(steps)]
 ```
 
-The mean value of total steps per day is 10766.19 and the median is 10766.19. THe differences from previous values are 0 and 1.188679.
+The mean value of total steps per day is 10766.19 and the median is 10766.19. THe differences from previous values are 0 and 1.188679. We can see that the median has changed after replacing the `NA` values with averages.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+1. Creating new column as `data_type` in `dataWithNA` table.
+
+```r
+dataWithNA$date_type <- naRemoved[, .(date_type = ifelse(weekdays(as.Date(date)) 
+														 == "Sunday" 
+														 | weekdays(as.Date(date)) 
+														 == "Saturday",
+														 "weekend",
+														 "weekday"))]
+```
+
+2. Making the plot.
+
+```r
+library(lattice)
+avgStpByDateType <- dataWithNA[, .(avg_steps
+								   = mean(steps, na.rm = TRUE)),
+							  by = .(date_type, interval)]
+
+xyplot(avg_steps ~ interval | date_type,
+	   data = avgStpByDateType,
+	   type = "l",
+	   xlab = "Interval",
+	   ylab = "Number of steps",
+	   layout = c(1,2))
+```
+
+![](PA1_template_files/figure-html/unnamed-chunk-1-1.png)<!-- -->
